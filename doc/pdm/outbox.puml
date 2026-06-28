@@ -1,0 +1,21 @@
+﻿@startuml
+
+entity outbox {
+    * id: uuid
+    --
+    * source: text
+    * specversion: text
+    * type: text
+    
+    datacontenttype: text
+    dataschema: text
+    subject: text
+    time: timestamp
+    data: bytea
+    * topic: text
+    retries_count: int
+    last_retry: timestamp
+    last_error: text
+}
+
+@enduml

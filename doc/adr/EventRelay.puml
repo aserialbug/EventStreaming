@@ -1,0 +1,206 @@
+﻿@startuml
+'https://plantuml.com/class-diagram
+
+' Интерфейсы
+interface IOutboxDao {
++ ReadNewAsync(cancellationToken: CancellationToken): Task<IEnumerable<OutboxEvent>>
++ UpdateAsync(event: OutboxEvent, \n\tcancellationToken: CancellationToken): Task
++ DeleteAsync(\n\teventIds: IEnumerable<OutboxEventId>, \n\tcancellationToken: CancellationToken): Task
+}
+interface IEventBrokerClient {
++ PublishEventsAsync(events: IEnumerable<OutboxEvent>, \n\tcancellationToken: CancellationToken): Task<PublishResult>
+}
+interface IPublishService {
++ PublishCycleAsync(cancellationToken: CancellationToken): Task
+}
+interface ITransactionService {
++ BeginAsync(): Task
++ CommitAsync(): Task
++ RollbackAsync(): Task
+}
+
+' Абстрактные классы
+' Классы
+class OutboxEvent {
++ Id: OutboxEventId
++ Event: CloudEvent
++ Topic: String
++ RetryIndex: int
++ LastRetry: DateTime
++ LastError: String
+}
+OutboxEvent o-- OutboxEventId
+OutboxEvent ..> CloudEvent
+
+class OutboxEventId {
+- _id: Guid
+- OutboxEventId(id: Guid)
++ AsGuid(): Guid
++ {static} FromGuid(value: Guid): OutboxEventId
++ {static} CreateSingle(): OutboxEventId
++ {static} CreateMany(int count): IEnumerable<OutboxEventId>
+}
+
+abstract class CloudEvent {
++ Id: CloudEventId
++ Source: Uri
++ SpecVersion: SpecVersion
++ Type: EventType
++ DataContentType: ContentType
++ DataSchema: Uri
++ Subject: EventSubject
++ Time: DateTime
++ Data: byte[]
+}
+CloudEvent o-- CloudEventId
+CloudEvent o-- SpecVersion
+CloudEvent o-- EventType
+CloudEvent o-- ContentType
+CloudEvent o-- EventSubject
+
+class ContentType {
+- _contenType: String
++ {static} JSON: ContentType
++ {static} XML: ContentType
++ {static} Avro: ContentType
+- ContentType(contenType: String)
++ WithBatch(): ContentType
++ ToString(): String
++ {static} FromString(string value): ContentType
+}
+note left of ContentType: "JSON: application/cloudevents+json\nXML: application/cloudevents+xml\nAvro: application/cloudevents+avro\nМетод WithBatch() добавляет суффикс -batch".
+
+
+class EventSubject {
+}
+
+class CloudEventId {
+- _id: Guid
+- CloudEventId(id: Guid)
++ AsGuid(): Guid
++ {static} FromGuid(value: Guid): CloudEventId
++ {static} CreateSingle(): CloudEventId
++ {static} CreateMany(int count): IEnumerable<CloudEventId>
+}
+
+class EventType {
++ NameSpace: NameSpace
++ System: InformationSystem
++ Aggregate: Aggregate
+- EventType(string value)
++ ToString(): String
++ {static} FromString(string value): EventType
++ {static} Create(\n\tnameSpace: NameSpace, \n\tinformationSystem: InformationSystem, \n\taggregate: Aggregate): EventType
+}
+EventType o-- NameSpace
+EventType o-- InformationSystem
+EventType o-- Aggregate
+
+class NameSpace {
+- _nameSpace: String
+- AggregateName(nameSpace: String)
++ ToString(): String
++ {static} FromString(string value): NameSpace
+}
+
+class InformationSystem {
+- _system: String
+- AggregateName(informationSystem: String)
++ ToString(): String
++ {static} FromString(string value): InformationSystem
+}
+
+class Aggregate {
++ Name: AggregateName
++ Version: Version
++ {static} ControlIn: Aggregate
++ {static} ControlOut: Aggregate
+- Aggregate(name: AggregateName, version: Version)
++ ToString(): String
++ WithVersion(version: Version): Aggregate
++ {static} FromString(string value): Aggregate
+}
+Aggregate o-- Version
+Aggregate o-- AggregateName
+note left of Aggregate: У агрегатов ControlIn и ControlOut\nверсия всегда равна нулю\n(не может иметь другого значения)
+
+class Version {
+- _version: int
+- Version(version: int)
++ ToString(): String
++ Increment(): Version
++ {static} Create(int value): Version
++ {static} FromString(string value): Version
+}
+
+class AggregateName {
+- _name: String
++ {static} ControlIn: AggregateName
++ {static} ControlOut: AggregateName
+- AggregateName(name: String)
++ ToString(): String
++ {static} FromString(string value): AggregateName
+}
+
+class SpecVersion {
+- _major: int
+- _minor: int
++ {static} Default: SpecVersion
+- SpecVersion(int major, int minor)
++ ToString(): String
++ WithMajor(int major): SpecVersion
++ WithMinor(int minor): SpecVersion
++ {static} FromString(string value): SpecVersion
++ {static} Create(int major, int minor): SpecVersion
+}
+
+class PublishResult {
+}
+
+class EventBrokerClient {
++ PublishEventsAsync(events: IEnumerable<OutboxEvent>, \n\tcancellationToken: CancellationToken): Task<PublishResult>
+}
+
+class EventVersion {
+- _version: int
++ {static} Default: EventVersion
+- EventVersion(version: int)
++ {static} FromInt(value: int): EventVersion
+}
+note left of EventVersion: "Версия контракта агрегата. \nУвеличивается при несовместимых\nизменениях в контракте\n Добавляется в виде суффикса к топику .v2".
+
+class EventPublishService {
+- _outboxDao: IOutboxDao
+- _eventBrokerClient: IEventBrokerClient
+- _transactionService: ITransactionService
++ EventPublishService(\n\ttransactionService: ITransactionService\n\toutboxDao: IOutboxDao, \n\teventBrokerClient: IEventBrokerClient)
++ PublishCycleAsync(cancellationToken: CancellationToken): Task
+}
+
+class PostgreSqlOutboxDao {
++ ReadNewAsync(cancellationToken: CancellationToken): Task<IEnumerable<OutboxEvent>>
++ UpdateAsync(event: OutboxEvent, \n\tcancellationToken: CancellationToken): Task
++ DeleteAsync(\n\teventIds: IEnumerable<OutboxEventId>, \n\tcancellationToken: CancellationToken): Task
+}
+
+class MsSqlOutboxDao {
++ ReadNewAsync(cancellationToken: CancellationToken): Task<IEnumerable<OutboxEvent>>
++ UpdateAsync(event: OutboxEvent, \n\tcancellationToken: CancellationToken): Task
++ DeleteAsync(\n\teventIds: IEnumerable<OutboxEventId>, \n\tcancellationToken: CancellationToken): Task
+}
+
+' Связи
+MsSqlOutboxDao ..|> IOutboxDao
+PostgreSqlOutboxDao ..|> IOutboxDao
+EventBrokerClient ..|> IEventBrokerClient
+EventPublishService ..|> IPublishService
+IPublishService ..> OutboxEvent
+EventPublishService o-- IEventBrokerClient
+EventPublishService o-- IOutboxDao
+EventPublishService o-- ITransactionService
+IEventBrokerClient ..> PublishResult
+
+
+
+
+@enduml
